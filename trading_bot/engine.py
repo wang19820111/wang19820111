@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from brokers.base import Broker
+from notify import Notifier
 from risk import (
     RiskParams,
     can_open_new_position,
@@ -37,6 +38,7 @@ class EngineDeps:
     strategy: StrategyParams
     risk: RiskParams
     dry_run: bool
+    notifier: Optional[Notifier] = None
 
 
 class Engine:
@@ -47,6 +49,10 @@ class Engine:
 
     def _tag(self) -> str:
         return "[DRY-RUN]" if self.d.dry_run else "[LIVE]"
+
+    def _notify(self, message: str) -> None:
+        if self.d.notifier is not None:
+            self.d.notifier.send(message)
 
     def run_cycle(self) -> None:
         broker = self.d.broker
@@ -110,8 +116,11 @@ class Engine:
         res = broker.buy_market(symbol, qty)
         log.info("%s BUY %d %s -> %s", self._tag(), qty, symbol, res.detail)
         if res.ok:
+            self._notify(f"BUY {qty} {symbol} @ ~{price:.2f} — {reason}")
             stop_res = broker.place_stop_loss(symbol, qty, stop)
             log.info("%s STOP-LOSS %s @ %.2f -> %s", self._tag(), symbol, stop, stop_res.detail)
+            if stop_res.ok:
+                self._notify(f"STOP-LOSS set {symbol} {qty} @ {stop:.2f}")
 
     def _handle_sell(self, symbol: str, reason: str, quantity: float) -> None:
         if self.d.dry_run:
@@ -119,3 +128,5 @@ class Engine:
             return
         res = self.d.broker.sell_market(symbol, quantity)
         log.info("%s SELL %s %s -> %s — %s", self._tag(), quantity, symbol, res.detail, reason)
+        if res.ok:
+            self._notify(f"SELL {quantity} {symbol} — {reason}")

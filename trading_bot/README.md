@@ -47,8 +47,10 @@ touching code.
 trading_bot/
 ├── run.py                # entry point + loop + market-hours gate
 ├── engine.py             # orchestrates: data → signal → risk → broker
+├── backtest.py           # replay the strategy over historical data
 ├── config.py             # all settings, loaded from .env
 ├── data_feed.py          # historical prices (yfinance)
+├── notify.py             # fill / stop-loss notifications (log + webhook)
 ├── risk.py               # position sizing, stop-loss, guardrails (pure)
 ├── strategy/
 │   ├── indicators.py     # RSI (Wilder's method, pure Python)
@@ -111,6 +113,50 @@ flagged. If you later want a broker built for automation, the engine's `Broker`
 interface (`brokers/base.py`) is designed so you can drop in another
 implementation (e.g. Alpaca) without changing anything else.
 
+## Backtest before you trust it
+
+Validate your RSI thresholds against real history *before* risking money. The
+backtester replays the **exact same** signal and risk logic the live engine uses:
+
+```bash
+python backtest.py
+```
+
+It fetches history for your `WATCHLIST`, simulates entries/exits/stops at the
+portfolio level (shared cash, `MAX_OPEN_POSITIONS` cap), and prints a report:
+
+```
+====================================================
+BACKTEST RESULTS
+====================================================
+Starting cash:     $10,000.00
+Ending equity:     $10,742.19
+Total return:      +7.42%
+Max drawdown:      4.85%
+Trades:            12  (W 8 / L 4, win rate 66.7%)
+----------------------------------------------------
+AAPL   2024-02-05 -> 2024-02-20    12 @   182.30 ->   191.10  pnl   +105.60  [signal]
+...
+```
+
+Tune `RSI_ENTRY` / `RSI_EXIT` / `STOP_LOSS_PCT` in `.env`, re-run, compare.
+
+**Caveats (read these):** fills are modeled at the daily close with no slippage
+or commissions; stop-losses trigger on the close (we only have closes, not
+intraday lows) and fill at the stop price, so real gap-downs can be worse. Treat
+results as directional, not a promise.
+
+## Notifications
+
+Fills and stop-loss triggers are always logged. To also get pushed alerts, set a
+Slack- or Discord-style incoming webhook in `.env`:
+
+```
+NOTIFY_WEBHOOK_URL=https://hooks.slack.com/services/...
+```
+
+Leave it blank to disable. A failed notification never interrupts trading.
+
 ## Tune the strategy
 
 All in `.env` — e.g. a more aggressive entry and tighter stop:
@@ -129,12 +175,14 @@ python -m pytest
 ```
 
 Covers the RSI math (against Wilder's reference values), the signal logic, the
-risk caps and circuit breaker, and the paper broker's fills, stops, and
-persistence. None of them touch the network or a live account.
+risk caps and circuit breaker, the backtest accounting, and the paper broker's
+fills, stops, and persistence. None of them touch the network or a live account.
 
 ## Suggested next steps
 
-- **Backtest** the RSI thresholds on historical data before trusting them live.
 - **Move this to a private repo** if you'd rather not keep your strategy public
   (the code is broker-credential-free, but a private repo is tidier for trading).
-- **Add a notifier** (email/Slack) on fills and stop-loss triggers.
+- **Swap in a broker built for automation** (e.g. Alpaca, which has real
+  paper-trading) by adding one `Broker` implementation — nothing else changes.
+- **Extend the strategy** — the signal logic is isolated in `strategy/`, so you
+  can add filters (trend, volume) or a second strategy behind the same interface.

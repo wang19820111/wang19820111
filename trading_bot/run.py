@@ -16,6 +16,7 @@ from brokers.paper import PaperBroker
 from config import Config
 from data_feed import get_closes
 from engine import Engine, EngineDeps
+from notify import Notifier
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,6 +62,7 @@ def build_engine(cfg: Config) -> Engine:
         strategy=cfg.strategy,
         risk=cfg.risk,
         dry_run=cfg.dry_run,
+        notifier=Notifier(cfg.notify_webhook_url),
     )
     return Engine(deps)
 
@@ -82,7 +84,11 @@ def main() -> int:
                 engine.run_cycle()
                 # Paper broker evaluates its own resting stops each cycle.
                 if isinstance(broker, PaperBroker):
-                    broker.check_stops()
+                    for res in broker.check_stops():
+                        if res.ok and engine.d.notifier:
+                            engine.d.notifier.send(
+                                f"STOP-LOSS triggered {res.quantity} {res.symbol} ({res.detail})"
+                            )
         except KeyboardInterrupt:
             log.info("Interrupted — shutting down.")
             return 0

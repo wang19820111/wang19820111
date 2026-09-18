@@ -80,6 +80,9 @@ class Config:
     # --- Persistence ---
     state_file: str = field(default_factory=lambda: os.getenv("STATE_FILE", "state.json"))
 
+    # --- Notifications (optional Slack/Discord-style webhook) ---
+    notify_webhook_url: str = field(default_factory=lambda: os.getenv("NOTIFY_WEBHOOK_URL", ""))
+
     strategy: StrategyParams = field(
         default_factory=lambda: StrategyParams(
             rsi_period=_get_int("RSI_PERIOD", 14),

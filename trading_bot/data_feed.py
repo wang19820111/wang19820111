@@ -7,15 +7,17 @@ itself (see Broker.get_price).
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import List, Tuple
 
 log = logging.getLogger(__name__)
 
 
-def get_closes(symbol: str, period: str = "3mo", interval: str = "1d") -> List[float]:
-    """Return chronological closing prices for a symbol (oldest first).
+def get_closes_with_dates(
+    symbol: str, period: str = "3mo", interval: str = "1d"
+) -> List[Tuple[str, float]]:
+    """Return chronological ``(date_iso, close)`` pairs for a symbol (oldest first).
 
-    Returns an empty list if data can't be fetched, so the engine can skip the
+    Returns an empty list if data can't be fetched, so callers can skip the
     symbol rather than crash.
     """
     try:
@@ -32,4 +34,13 @@ def get_closes(symbol: str, period: str = "3mo", interval: str = "1d") -> List[f
     if df is None or df.empty or "Close" not in df:
         log.warning("No price data returned for %s", symbol)
         return []
-    return [float(x) for x in df["Close"].dropna().tolist()]
+
+    out: List[Tuple[str, float]] = []
+    for ts, close in df["Close"].dropna().items():
+        out.append((ts.isoformat(), float(close)))
+    return out
+
+
+def get_closes(symbol: str, period: str = "3mo", interval: str = "1d") -> List[float]:
+    """Return chronological closing prices for a symbol (oldest first)."""
+    return [c for _, c in get_closes_with_dates(symbol, period, interval)]
