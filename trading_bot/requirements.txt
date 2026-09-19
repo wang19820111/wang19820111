@@ -1,0 +1,12 @@
+# Core data feed (free market data, no auth)
+yfinance>=0.2.40
+
+# Config loading from .env
+python-dotenv>=1.0.0
+
+# --- Live Robinhood trading only (not needed for DRY_RUN / paper) ---
+robin_stocks>=3.0.0
+pyotp>=2.9.0        # TOTP for Robinhood MFA
+
+# --- Development ---
+pytest>=8.0.0
